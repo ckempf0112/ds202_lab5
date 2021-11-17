@@ -1,0 +1,91 @@
+---
+title: "Lab 5"
+author: "Colin Kempf"
+date: "11/16/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+acc <- read.csv("https://raw.githubusercontent.com/xdaiISU/ds202materials/master/hwlabs/fars2017/accident.csv", stringsAsFactors = FALSE)
+person <- read.csv("https://raw.githubusercontent.com/xdaiISU/ds202materials/master/hwlabs/fars2017/person.csv", stringsAsFactors = FALSE)
+library(ggplot2)
+library(tidyverse)
+library(lubridate)
+```
+```{r}
+fatalities <- person %>% filter(INJ_SEV==4)
+head(fatalities)
+```
+```{r}
+dangerVehicles <- fatalities %>% group_by(MAKE) %>% summarise(fatalities = n())
+dangerVehicles
+```
+```{r}
+dat <- readxl::read_xlsx("FRPP_GLC_-_United_StatesNov42021.xlsx")
+dat <- dat %>% rename(STATE="State Code")
+dat <- dat %>% rename(NAME="State Name")
+dat$STATE <- as.integer(dat$STATE)
+statefat <- fatalities %>% select(STATE,MAKE) %>% drop_na(MAKE)
+state <- dat %>% group_by(STATE,NAME) %>% distinct(STATE,NAME)
+dat3 <- state %>% inner_join(statefat)
+makevsfat <- dat3 %>% group_by(NAME,MAKE) %>% summarise(deaths=n()) %>% 
+  top_n(1, deaths)
+states <- map_data("state")
+statenames <- data.frame(region=tolower(state.name), long=state.center$x, lat=state.center$y)
+makevsfat <- makevsfat %>% mutate(region = tolower(NAME)) %>% inner_join(statenames)
+states %>% ggplot(aes(x = long, y = lat)) + 
+  geom_path(aes(group = group)) + 
+  coord_map() +
+  geom_text(data=makevsfat, aes(long, lat, label=MAKE))
+```
+
+Question 3: 
+
+The most common make involved in fatal accidents is make 20, Chevrolet. It is clear from the map that there is a large majority of states where this is true, especially in the Midwest. 
+
+```{r}
+combdat<- person %>% inner_join(acc,by=c("STATE","COUNTY","DAY","MONTH","HOUR","MINUTE"))
+head(combdat)
+```
+```{r}
+combdat %>% group_by(DAY_WEEK) %>% summarise(num_accidents=n()) %>% mutate(`day of the week`  = wday(DAY_WEEK, label = TRUE)) %>% 
+  ggplot(aes(x=`day of the week`,y=num_accidents)) + geom_bar(stat = "Identity")
+
+combdat %>% group_by(HOUR) %>% filter(HOUR<25) %>% summarise(num_accidents=n()) %>% 
+  ggplot(aes(x=HOUR,y=num_accidents)) + geom_bar(stat = "Identity")
+
+genderdat <- combdat %>%  filter(SEX<3)
+genderdat %>% mutate(gender = ifelse(genderdat$SEX == 1, "male", "female")) %>% group_by(gender)  %>% summarise(num_accidents=n()) %>% 
+  ggplot(aes(x=gender,y=num_accidents)) + geom_bar(stat = "Identity")
+```
+
+Question 5: 
+
+For the days of the week, the graph shows the number of accidents increasing as the weekend comes. This makes sense as more people are going out and driving around. 
+
+Looking at the hours, the graph shows the number of accidents increasing towards the afternoon and evening. This makes sense as more and more people get off work, and begin to drive home, before starting things like errands or going to activities, all of which require driving to.
+
+Looking at gender, the graph shows the number of accidents is nearly doubled for men than it is women. The reasoning for this could be for a number of reasons and is hard to estimate. It could be that men just drive less careful, or are more likely to break traffic laws. 
+
+```{r}
+dat <- dat %>% rename(COUNTY="County Code")
+dat <- dat %>% rename(CN="County Name")
+dat$COUNTY <- as.integer(dat$COUNTY)
+dat6 <- fatalities %>% select(COUNTY) %>% drop_na(COUNTY)
+county <- dat %>% group_by(COUNTY,CN) %>% distinct(COUNTY,CN)
+
+dat6 <- county %>% inner_join(dat6) %>% summarise(deaths=n())
+counties <- map_data("county")
+counties <- dat6 %>% mutate(subregion=tolower(CN)) %>% inner_join(counties, by="subregion")
+counties %>% ggplot(aes(x = long, y = lat)) + 
+  geom_polygon(aes(group = group,fill=deaths)) + 
+  coord_map()+scale_fill_continuous(low="thistle2", high="darkred", 
+                       guide="colorbar",na.value="white")
+```
+
+Question 6:
+
+It looks like the number of deaths correlates with where the number of people live. In more popular areas of living, the death rates do appear to be higher, especially areas with large cities. This obviously tracks, as the more people there are, the more likely the possiblity of an accident there is. 
